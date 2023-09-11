@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:follow_the_leader/follow_the_leader.dart';
+import 'package:overlord/follow_the_leader.dart';
 import 'package:super_editor/src/core/document.dart';
 import 'package:super_editor/src/core/document_composer.dart';
 import 'package:super_editor/src/core/document_layout.dart';
@@ -10,12 +11,12 @@ import 'package:super_editor/src/infrastructure/_logging.dart';
 import 'package:super_editor/src/infrastructure/flutter/flutter_pipeline.dart';
 import 'package:super_editor/src/infrastructure/platforms/ios/selection_handles.dart';
 import 'package:super_editor/src/infrastructure/platforms/mobile_documents.dart';
-import 'package:super_editor/src/infrastructure/toolbar_position_delegate.dart';
 import 'package:super_editor/src/infrastructure/touch_controls.dart';
 import 'package:super_text_layout/super_text_layout.dart';
 
 import 'magnifier.dart';
 
+/// An application overlay that displays an iOS-style toolbar.
 class IosDocumentTouchEditingControls extends StatefulWidget {
   const IosDocumentTouchEditingControls({
     Key? key,
@@ -25,16 +26,15 @@ class IosDocumentTouchEditingControls extends StatefulWidget {
     required this.document,
     required this.selection,
     required this.changeSelection,
-    required this.handleColor,
-    this.onDoubleTapOnCaret,
-    this.onTripleTapOnCaret,
+    // required this.handleColor,
+    // this.onDoubleTapOnCaret,
+    // this.onTripleTapOnCaret,
     this.onFloatingCursorStart,
     this.onFloatingCursorMoved,
     this.onFloatingCursorStop,
-    this.magnifierFocalPointOffset,
     required this.popoverToolbarBuilder,
     this.createOverlayControlsClipper,
-    this.disableGestureHandling = false,
+    // this.disableGestureHandling = false,
     this.showDebugPaint = false,
   }) : super(key: key);
 
@@ -59,14 +59,14 @@ class IosDocumentTouchEditingControls extends StatefulWidget {
   /// (probably the entire screen).
   final CustomClipper<Rect> Function(BuildContext overlayContext)? createOverlayControlsClipper;
 
-  /// Color the iOS-style text selection drag handles.
-  final Color handleColor;
-
-  /// Callback invoked on iOS when the user double taps on the caret.
-  final VoidCallback? onDoubleTapOnCaret;
-
-  /// Callback invoked on iOS when the user triple taps on the caret.
-  final VoidCallback? onTripleTapOnCaret;
+  // /// Color the iOS-style text selection drag handles.
+  // final Color handleColor;
+  //
+  // /// Callback invoked on iOS when the user double taps on the caret.
+  // final VoidCallback? onDoubleTapOnCaret;
+  //
+  // /// Callback invoked on iOS when the user triple taps on the caret.
+  // final VoidCallback? onTripleTapOnCaret;
 
   /// Callback invoked when the floating cursor becomes visible.
   final VoidCallback? onFloatingCursorStart;
@@ -77,12 +77,6 @@ class IosDocumentTouchEditingControls extends StatefulWidget {
 
   /// Callback invoked when the floating cursor disappears.
   final VoidCallback? onFloatingCursorStop;
-
-  /// Offset where the magnifier should focus.
-  ///
-  /// The magnifier is displayed whenever this offset is non-null, otherwise
-  /// the magnifier is not shown.
-  final Offset? magnifierFocalPointOffset;
 
   /// Builder that constructs the popover toolbar that's displayed above
   /// selected text.
@@ -96,7 +90,7 @@ class IosDocumentTouchEditingControls extends StatefulWidget {
   ///
   /// While this is `true`, the user can't tap or drag on selection
   /// handles or other controls.
-  final bool disableGestureHandling;
+  // final bool disableGestureHandling;
 
   final bool showDebugPaint;
 
@@ -115,23 +109,6 @@ class _IosDocumentTouchEditingControlsState extends State<IosDocumentTouchEditin
   static const _defaultFloatingCursorHeight = 20.0;
   static const _defaultFloatingCursorWidth = 2.0;
 
-  // These global keys are assigned to each draggable handle to
-  // prevent a strange dragging issue.
-  //
-  // Without these keys, if the user drags into the auto-scroll area
-  // for a period of time, we never receive a
-  // "pan end" or "pan cancel" callback. I have no idea why this is
-  // the case. These handles sit in an Overlay, so it's not as if they
-  // suffered some conflict within a ScrollView. I tried many adjustments
-  // to recover the end/cancel callbacks. Finally, I tried adding these
-  // global keys based on a hunch that perhaps the gesture detector was
-  // somehow getting switched out, or assigned to a different widget, and
-  // that was somehow disrupting the callback series. For now, these keys
-  // seem to solve the problem.
-  final _collapsedHandleKey = GlobalKey();
-  final _upstreamHandleKey = GlobalKey();
-  final _downstreamHandleKey = GlobalKey();
-
   late BlinkController _caretBlinkController;
   Offset? _prevCaretOffset;
 
@@ -141,6 +118,8 @@ class _IosDocumentTouchEditingControlsState extends State<IosDocumentTouchEditin
   Offset? _initialFloatingCursorOffset;
   final _floatingCursorOffset = ValueNotifier<Offset?>(null);
   double _floatingCursorHeight = _defaultFloatingCursorHeight;
+
+  final _boundsKey = GlobalKey();
 
   @override
   void initState() {
@@ -252,182 +231,43 @@ class _IosDocumentTouchEditingControlsState extends State<IosDocumentTouchEditin
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-        listenable: widget.editingController,
-        builder: (context, _) {
-          return Padding(
-            // Remove the keyboard from the space that we occupy so that
-            // clipping calculations apply to the expected visual borders,
-            // instead of applying underneath the keyboard.
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-            child: ClipRect(
-              clipper: widget.createOverlayControlsClipper?.call(context),
-              child: SizedBox(
-                // ^ SizedBox tries to be as large as possible, because
-                // a Stack will collapse into nothing unless something
-                // expands it.
-                width: double.infinity,
-                height: double.infinity,
-                child: Stack(
-                  children: [
-                    // Build caret or drag handles
-                    _buildHandles(),
-                    // Build the floating cursor
-                    _buildFloatingCursor(),
-                    // Build the editing toolbar
-                    if (widget.editingController.shouldDisplayToolbar && widget.editingController.isToolbarPositioned)
-                      _buildToolbar(),
-                    // Build the focal point for the magnifier
-                    if (widget.magnifierFocalPointOffset != null) _buildMagnifierFocalPoint(),
-                    // Build the magnifier
-                    if (widget.editingController.shouldDisplayMagnifier) _buildMagnifier(),
-                    if (widget.showDebugPaint)
-                      IgnorePointer(
-                        child: Container(
-                          width: double.infinity,
-                          height: double.infinity,
-                          color: Colors.yellow.withOpacity(0.2),
-                        ),
+      listenable: widget.editingController,
+      builder: (context, _) {
+        return Padding(
+          // Remove the keyboard from the space that we occupy so that
+          // clipping calculations apply to the expected visual borders,
+          // instead of applying underneath the keyboard.
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: ClipRect(
+            clipper: widget.createOverlayControlsClipper?.call(context),
+            child: SizedBox(
+              key: _boundsKey,
+              // ^ SizedBox tries to be as large as possible, because
+              // a Stack will collapse into nothing unless something
+              // expands it.
+              width: double.infinity,
+              height: double.infinity,
+              child: Stack(
+                children: [
+                  // Build the floating cursor
+                  _buildFloatingCursor(),
+                  // Build the editing toolbar
+                  if (widget.editingController.shouldDisplayToolbar && widget.editingController.isToolbarPositioned)
+                    _buildToolbar(),
+                  if (widget.showDebugPaint)
+                    IgnorePointer(
+                      child: Container(
+                        width: double.infinity,
+                        height: double.infinity,
+                        color: Colors.yellow.withOpacity(0.2),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
-          );
-        });
-  }
-
-  Widget _buildHandles() {
-    // When the floating cursor is over text or near text,
-    // we don't show the drag handles.
-    //
-    // Every time the floating cursor moves to a position which
-    // changes this state or when it changes its visibility,
-    // this widget is rebuilt.
-    return ValueListenableBuilder<bool>(
-      valueListenable: _isFloatingCursorOverOrNearText,
-      builder: (context, isNearText, __) {
-        if (isNearText) {
-          return const SizedBox.shrink();
-        }
-
-        if (!widget.editingController.shouldDisplayCollapsedHandle &&
-            !widget.editingController.shouldDisplayExpandedHandles) {
-          editorGesturesLog.finer('Not building overlay handles because they aren\'t desired');
-          return const SizedBox.shrink();
-        }
-
-        late List<Widget> handles;
-
-        if (widget.editingController.shouldDisplayCollapsedHandle) {
-          handles = [
-            _buildCollapsedHandle(),
-          ];
-        } else {
-          handles = _buildExpandedHandles();
-        }
-
-        return Stack(
-          children: handles,
+          ),
         );
       },
-    );
-  }
-
-  Widget _buildCollapsedHandle() {
-    return _buildHandleOld(
-      handleKey: _collapsedHandleKey,
-      handleType: HandleType.collapsed,
-      debugColor: Colors.blue,
-    );
-  }
-
-  List<Widget> _buildExpandedHandles() {
-    return [
-      // Left-bounding handle touch target
-      _buildHandleOld(
-        handleKey: _upstreamHandleKey,
-        handleType: HandleType.upstream,
-        debugColor: Colors.green,
-      ),
-      // right-bounding handle touch target
-      _buildHandleOld(
-        handleKey: _downstreamHandleKey,
-        handleType: HandleType.downstream,
-        debugColor: Colors.red,
-      ),
-    ];
-  }
-
-  Widget _buildHandleOld({
-    required Key handleKey,
-    required HandleType handleType,
-    required Color debugColor,
-  }) {
-    const ballDiameter = 8.0;
-
-    late LeaderLink handleLink;
-    late Widget handle;
-    switch (handleType) {
-      case HandleType.collapsed:
-        handleLink = widget.editingController.selectionLinks.caretLink;
-        handle = ValueListenableBuilder<bool>(
-          valueListenable: _isShowingFloatingCursor,
-          builder: (context, isShowingFloatingCursor, child) {
-            return IOSCollapsedHandle(
-              controller: _caretBlinkController,
-              color: isShowingFloatingCursor ? Colors.grey : widget.handleColor,
-              caretHeight: widget.editingController.caretHeight!,
-            );
-          },
-        );
-        break;
-      case HandleType.upstream:
-        handleLink = widget.editingController.selectionLinks.upstreamLink;
-        handle = IOSSelectionHandle.upstream(
-          color: widget.handleColor,
-          handleType: handleType,
-          caretHeight: widget.editingController.upstreamCaretHeight!,
-          ballRadius: ballDiameter / 2,
-        );
-        break;
-      case HandleType.downstream:
-        handleLink = widget.editingController.selectionLinks.downstreamLink;
-        handle = IOSSelectionHandle.upstream(
-          color: widget.handleColor,
-          handleType: handleType,
-          caretHeight: widget.editingController.downstreamCaretHeight!,
-          ballRadius: ballDiameter / 2,
-        );
-        break;
-    }
-
-    return _buildHandle(
-      handleKey: handleKey,
-      handle: handle,
-      handleLink: handleLink,
-      debugColor: debugColor,
-    );
-  }
-
-  Widget _buildHandle({
-    required Key handleKey,
-    required Widget handle,
-    required LeaderLink handleLink,
-    required Color debugColor,
-  }) {
-    return Follower.withOffset(
-      key: handleKey,
-      link: handleLink,
-      leaderAnchor: Alignment.center,
-      followerAnchor: Alignment.center,
-      showWhenUnlinked: false,
-      child: IgnorePointer(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5),
-          color: widget.showDebugPaint ? debugColor : Colors.transparent,
-          child: handle,
-        ),
-      ),
     );
   }
 
@@ -459,33 +299,6 @@ class _IosDocumentTouchEditingControlsState extends State<IosDocumentTouchEditin
     );
   }
 
-  Widget _buildMagnifierFocalPoint() {
-    // When the user is dragging a handle in this overlay, we
-    // are responsible for positioning the focal point for the
-    // magnifier to follow. We do that here.
-    return Positioned(
-      left: widget.magnifierFocalPointOffset!.dx,
-      top: widget.magnifierFocalPointOffset!.dy,
-      child: CompositedTransformTarget(
-        link: widget.editingController.magnifierFocalPointLink,
-        child: const SizedBox(width: 1, height: 1),
-      ),
-    );
-  }
-
-  Widget _buildMagnifier() {
-    // Display a magnifier that tracks a focal point.
-    //
-    // When the user is dragging an overlay handle, we place a LayerLink
-    // target. This magnifier follows that target.
-    return Center(
-      child: IOSFollowingMagnifier.roundedRectangle(
-        layerLink: widget.editingController.magnifierFocalPointLink,
-        offsetFromFocalPoint: const Offset(0, -72),
-      ),
-    );
-  }
-
   Widget _buildToolbar() {
     // TODO: figure out why this approach works. Why isn't the text field's
     //       RenderBox offset stale when the keyboard opens or closes? Shouldn't
@@ -501,23 +314,43 @@ class _IosDocumentTouchEditingControlsState extends State<IosDocumentTouchEditin
     //         - If this same approach were used in a situation where the
     //           distance between the left edge of the available space and the
     //           text field changed, I think it would fail.
-    return CustomSingleChildLayout(
-      delegate: ToolbarPositionDelegate(
-        // TODO: handle situation where document isn't full screen
-        textFieldGlobalOffset: Offset.zero,
-        desiredTopAnchorInTextField: widget.editingController.toolbarTopAnchor!,
-        desiredBottomAnchorInTextField: widget.editingController.toolbarBottomAnchor!,
-        screenPadding: widget.editingController.screenPadding,
+    // return CustomSingleChildLayout(
+    //   delegate: ToolbarPositionDelegate(
+    //     // TODO: handle situation where document isn't full screen
+    //     textFieldGlobalOffset: Offset.zero,
+    //     desiredTopAnchorInTextField: widget.editingController.toolbarTopAnchor!,
+    //     desiredBottomAnchorInTextField: widget.editingController.toolbarBottomAnchor!,
+    //     screenPadding: widget.editingController.screenPadding,
+    //   ),
+    //   child: IgnorePointer(
+    //     ignoring: !widget.editingController.shouldDisplayToolbar,
+    //     child: AnimatedOpacity(
+    //       opacity: widget.editingController.shouldDisplayToolbar ? 1.0 : 0.0,
+    //       duration: const Duration(milliseconds: 150),
+    //       child: Builder(builder: (context) {
+    //         return widget.popoverToolbarBuilder(context);
+    //       }),
+    //     ),
+    //   ),
+    // );
+
+    return FollowerFadeOutBeyondBoundary(
+      link: widget.editingController.selectionLinks.expandedSelectionBoundsLink,
+      boundary: WidgetFollowerBoundary(
+        boundaryKey: _boundsKey,
+        devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
       ),
-      child: IgnorePointer(
-        ignoring: !widget.editingController.shouldDisplayToolbar,
-        child: AnimatedOpacity(
-          opacity: widget.editingController.shouldDisplayToolbar ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 150),
-          child: Builder(builder: (context) {
-            return widget.popoverToolbarBuilder(context);
-          }),
+      child: Follower.withAligner(
+        link: widget.editingController.selectionLinks.expandedSelectionBoundsLink,
+        // leaderAnchor: Alignment.topCenter,
+        // followerAnchor: Alignment.bottomCenter,
+        // offset: const Offset(0, -16),
+        aligner: CupertinoPopoverToolbarAligner(_boundsKey),
+        boundary: WidgetFollowerBoundary(
+          boundaryKey: _boundsKey,
+          devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
         ),
+        child: widget.popoverToolbarBuilder(context),
       ),
     );
   }
@@ -648,6 +481,33 @@ class IosDocumentGestureEditingController extends GestureEditingController {
       _downstreamHandleOffset = offset;
       notifyListeners();
     }
+  }
+
+  final _magnifierLink = LayerLink();
+
+  @override
+  void showMagnifier() {
+    print("showMagnifier()");
+    _newMagnifierLink = _magnifierLink;
+    super.showMagnifier();
+  }
+
+  @override
+  void hideMagnifier() {
+    print("hideMagnifier()");
+    _newMagnifierLink = null;
+    super.hideMagnifier();
+  }
+
+  LayerLink? get newMagnifierLink => _newMagnifierLink;
+  LayerLink? _newMagnifierLink;
+  set newMagnifierLink(LayerLink? link) {
+    if (_newMagnifierLink == link) {
+      return;
+    }
+
+    _newMagnifierLink = link;
+    notifyListeners();
   }
 }
 

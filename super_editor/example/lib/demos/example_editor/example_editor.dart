@@ -333,7 +333,16 @@ class _ExampleEditorState extends State<ExampleEditor> {
                   ),
                   Align(
                     alignment: Alignment.bottomRight,
-                    child: _buildCornerFabs(),
+                    child: ListenableBuilder(
+                      listenable: _composer.selectionNotifier,
+                      builder: (context, child) {
+                        return Padding(
+                          padding: EdgeInsets.only(bottom: _isMobile && _composer.selection != null ? 48 : 0),
+                          child: child,
+                        );
+                      },
+                      child: _buildCornerFabs(),
+                    ),
                   ),
                 ],
               );
@@ -398,6 +407,8 @@ class _ExampleEditorState extends State<ExampleEditor> {
     );
   }
 
+  final _magnifierFocalPoint = ValueNotifier<LayerLink?>(null);
+
   Widget _buildEditor(BuildContext context) {
     final isLight = Theme.of(context).brightness == Brightness.light;
 
@@ -414,10 +425,15 @@ class _ExampleEditorState extends State<ExampleEditor> {
             focusNode: _editorFocusNode,
             scrollController: _scrollController,
             documentLayoutKey: _docLayoutKey,
+            magnifierFocalPoint: _magnifierFocalPoint,
             documentOverlayBuilders: [
               DefaultCaretOverlayBuilder(
                 caretStyle: const CaretStyle().copyWith(color: isLight ? Colors.black : Colors.redAccent),
               ),
+              if (defaultTargetPlatform == TargetPlatform.iOS) //
+                IosEditorControlsDocumentLayerBuilder(
+                  magnifierFocalPoint: _magnifierFocalPoint,
+                ),
             ],
             selectionLayerLinks: _selectionLayerLinks,
             selectionStyle: isLight

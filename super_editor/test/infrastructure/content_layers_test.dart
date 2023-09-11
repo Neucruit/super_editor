@@ -495,7 +495,7 @@ class _SizeValidatingLayer extends ContentLayerStatefulWidget {
 
 class _SizeValidatingLayerState extends ContentLayerState<_SizeValidatingLayer, Object> {
   @override
-  Object? computeLayoutData(RenderObject? contentLayout) => null;
+  Object? computeLayoutData(Element? contentElement, RenderObject? contentLayout) => null;
 
   @override
   Widget doBuild(BuildContext context, Object? layoutData) {
@@ -717,7 +717,7 @@ class _RebuildableContentLayerWidgetState extends ContentLayerState<_Rebuildable
   }
 
   @override
-  Object? computeLayoutData(RenderObject? contentLayout) => null;
+  Object? computeLayoutData(Element? contentElement, RenderObject? contentLayout) => null;
 
   @override
   Widget doBuild(BuildContext context, Object? object) {

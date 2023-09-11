@@ -25,8 +25,8 @@ import 'package:super_editor/src/infrastructure/content_layers.dart';
 import 'package:super_editor/src/infrastructure/document_gestures_interaction_overrides.dart';
 import 'package:super_editor/src/infrastructure/documents/document_scaffold.dart';
 import 'package:super_editor/src/infrastructure/documents/document_scroller.dart';
+import 'package:super_editor/src/infrastructure/documents/selection_leader_document_layer.dart';
 import 'package:super_editor/src/infrastructure/links.dart';
-import 'package:super_editor/src/infrastructure/selection_leader_document_layer.dart';
 
 import '../infrastructure/platforms/mobile_documents.dart';
 import 'read_only_document_android_touch_interactor.dart';
@@ -447,7 +447,6 @@ class _SelectionLeadersDocumentLayerBuilder implements ReadOnlyDocumentLayerBuil
     return SelectionLeadersDocumentLayer(
       document: readerContext.document,
       selection: readerContext.selection,
-      documentLayoutResolver: () => readerContext.documentLayout,
       links: links,
       showDebugLeaderBounds: showDebugLeaderBounds,
     );

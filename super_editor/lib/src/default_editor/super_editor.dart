@@ -21,10 +21,10 @@ import 'package:super_editor/src/infrastructure/_logging.dart';
 import 'package:super_editor/src/infrastructure/content_layers.dart';
 import 'package:super_editor/src/infrastructure/documents/document_scaffold.dart';
 import 'package:super_editor/src/infrastructure/documents/document_scroller.dart';
+import 'package:super_editor/src/infrastructure/documents/selection_leader_document_layer.dart';
 import 'package:super_editor/src/infrastructure/links.dart';
 import 'package:super_editor/src/infrastructure/platforms/ios/ios_document_controls.dart';
 import 'package:super_editor/src/infrastructure/platforms/mac/mac_ime.dart';
-import 'package:super_editor/src/infrastructure/selection_leader_document_layer.dart';
 import 'package:super_editor/src/infrastructure/text_input.dart';
 import 'package:super_text_layout/super_text_layout.dart';
 
@@ -113,12 +113,14 @@ class SuperEditor extends StatefulWidget {
     this.selectorHandlers,
     this.gestureMode,
     this.contentTapDelegateFactory = superEditorLaunchLinkTapHandlerFactory,
+    this.magnifierFocalPoint,
     this.androidHandleColor,
     this.androidToolbarBuilder,
     this.iOSHandleColor,
     this.iOSToolbarBuilder,
     this.createOverlayControlsClipper,
     this.selectionLayerLinks,
+    this.documentUnderlayBuilders = const [],
     this.documentOverlayBuilders = const [DefaultCaretOverlayBuilder()],
     this.autofocus = false,
     this.overlayController,
@@ -224,6 +226,8 @@ class SuperEditor extends StatefulWidget {
   /// when a user taps on a link.
   final SuperEditorContentTapDelegateFactory? contentTapDelegateFactory;
 
+  final ValueNotifier<LayerLink?>? magnifierFocalPoint;
+
   /// Color of the text selection drag handles on Android.
   final Color? androidHandleColor;
 
@@ -258,6 +262,10 @@ class SuperEditor extends StatefulWidget {
 
   /// The [Document] that's edited by the [editor].
   final Document document;
+
+  /// Layers that are displayed under the document layout, aligned
+  /// with the location and size of the document layout.
+  final List<SuperEditorLayerBuilder> documentUnderlayBuilders;
 
   /// Layers that are displayed on top of the document layout, aligned
   /// with the location and size of the document layout.
@@ -540,6 +548,11 @@ class SuperEditorState extends State<SuperEditor> {
             scroller: _scroller,
             presenter: presenter,
             componentBuilders: widget.componentBuilders,
+            underlays: [
+              // Add all underlays that the app wants.
+              for (final underlayBuilder in widget.documentUnderlayBuilders) //
+                (context) => underlayBuilder.build(context, editContext),
+            ],
             overlays: [
               // Layer that positions and sizes leader widgets at the bounds
               // of the users selection so that carets, handles, toolbars, and
@@ -547,6 +560,7 @@ class SuperEditorState extends State<SuperEditor> {
               (context) {
                 return _SelectionLeadersDocumentLayerBuilder(
                   links: _selectionLinks,
+                  showDebugLeaderBounds: false,
                 ).build(context, editContext);
               },
               // Add all overlays that the app wants.
@@ -661,6 +675,7 @@ class SuperEditorState extends State<SuperEditor> {
       documentKey: _docLayoutKey,
       documentLayoutLink: _documentLayoutLink,
       selectionLinks: _selectionLinks,
+      magnifierFocalPointLink: widget.magnifierFocalPoint,
       handleColor: widget.iOSHandleColor ?? Theme.of(context).primaryColor,
       popoverToolbarBuilder: widget.iOSToolbarBuilder ?? (_) => const SizedBox(),
       floatingCursorController: _floatingCursorController,
@@ -693,7 +708,6 @@ class _SelectionLeadersDocumentLayerBuilder implements SuperEditorLayerBuilder {
     return SelectionLeadersDocumentLayer(
       document: editContext.document,
       selection: editContext.composer.selectionNotifier,
-      documentLayoutResolver: () => editContext.documentLayout,
       links: links,
       showDebugLeaderBounds: showDebugLeaderBounds,
     );
